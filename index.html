@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Contract Generator</title>
+<style>
+  :root { --fg: #111; --muted: #666; --line: #e2e2e2; --accent: #0b6cff; --bg: #fafafa; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         margin: 0; background: var(--bg); color: var(--fg); }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  fieldset { border: 1px solid var(--line); border-radius: 10px; background: #fff;
+             padding: 18px 20px; margin: 0 0 20px; }
+  legend { font-weight: 600; padding: 0 6px; }
+  label { display: block; font-size: 13px; color: #333; margin: 12px 0 4px; }
+  input[type=text], input[type=date], input[type=number], select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; background: #fff;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .inline { display: flex; gap: 16px; margin-top: 6px; }
+  .inline label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 14px; color: #111; }
+  .deliverable { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 12px; position: relative; }
+  .deliverable .remove { position: absolute; top: 8px; right: 10px; border: 0; background: transparent; color: #b00; cursor: pointer; font-size: 13px; }
+  .platforms { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 4px; }
+  .platforms label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 14px; color: #111; }
+  button.primary { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 12px 18px; font-size: 15px; cursor: pointer; }
+  button.secondary { background: #fff; color: #111; border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .preview { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+             font-size: 15px; line-height: 1.9; direction: rtl; text-align: right; white-space: pre-wrap; }
+  .error { color: #b00020; margin-top: 12px; font-size: 14px; }
+</style>
+<!-- Load required libraries from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.7/pizzip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.50.0/docxtemplater.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Contract Generator</h1>
+  <p class="sub">Fill in the details below, review the generated clause, then download the DOCX.</p>
+
+  <form id="form">
+    <fieldset>
+      <legend>1. Date &amp; client</legend>
+      <div class="row">
+        <div>
+          <label for="date">Contract date</label>
+          <input id="date" name="date" type="date" required />
+        </div>
+        <div>
+          <label>Client gender</label>
+          <div class="inline">
+            <label><input type="radio" name="gender" value="male" checked /> Male</label>
+            <label><input type="radio" name="gender" value="female" /> Female</label>
+          </div>
+        </div>
+      </div>
+      <label for="name">Client name</label>
+      <input id="name" name="name" type="text" required />
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Deliverables</legend>
+      <div id="deliverables"></div>
+      <div class="actions">
+        <button type="button" class="secondary" id="addDeliverable">+ Add deliverable</button>
+      </div>
+      <p class="hint">Quantity must be a whole number from 1 to 10. Platforms are fixed.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Amount &amp; generate</legend>
+      <label for="amount">Amount (EGP)</label>
+      <input id="amount" name="amount" type="number" min="1000" step="1" required />
+      <p class="hint">Minimum 1000 EGP. Both Arabic-Indic numerals and Arabic wording are generated automatically.</p>
+      <div class="actions" style="margin-top: 18px">
+        <button type="submit" class="primary" id="submitBtn">Generate DOCX</button>
+      </div>
+      <div class="error" id="error" hidden></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Preview</legend>
+      <div class="preview" id="preview">— Fill in the form to see the scope clause —</div>
+    </fieldset>
+  </form>
+</div>
+
+<template id="deliverableTpl">
+  <div class="deliverable">
+    <button type="button" class="remove">Remove</button>
+    <div class="row">
+      <div>
+        <label>Content type</label>
+        <select class="ctype">
+          <option value="story">Story</option>
+          <option value="reel">Reel</option>
+          <option value="post">Post</option>
+          <option value="video">Video</option>
+        </select>
+      </div>
+      <div>
+        <label>Quantity (1–10)</label>
+        <input class="qty" type="number" min="1" max="10" step="1" value="1" />
+      </div>
+    </div>
+
+    <label>Post on platforms</label>
+    <div class="platforms">
+      <label><input type="checkbox" class="pf" value="إنستجرام" checked /> Instagram</label>
+      <label><input type="checkbox" class="pf" value="فيسبوك" /> Facebook</label>
+      <label><input type="checkbox" class="pf" value="تيك توك" /> TikTok</label>
+      <label><input type="checkbox" class="pf" value="يوتيوب" /> YouTube</label>
+    </div>
+
+    <label>Mirror to platforms (optional)</label>
+    <div class="platforms">
+      <label><input type="checkbox" class="mf" value="إنستجرام" /> Instagram</label>
+      <label><input type="checkbox" class="mf" value="فيسبوك" /> Facebook</label>
+      <label><input type="checkbox" class="mf" value="تيك توك" /> TikTok</label>
+      <label><input type="checkbox" class="mf" value="يوتيوب" /> YouTube</label>
+    </div>
+
+    <div class="inline" style="margin-top: 10px">
+      <label><input type="checkbox" class="boost" /> Add boosting code</label>
+    </div>
+  </div>
+</template>
+
+<script>
+// ==========================================
+// 1. ARABIC NUMBER LOGIC
+// ==========================================
+const ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
+const TEENS = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+const TENS = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+const HUNDREDS = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+const ARABIC_INDIC_MAP = { '0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤', '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩' };
+
+function joinAr(parts) { return parts.filter(Boolean).join(' و'); }
+
+function below1000(n) {
+  const parts = [];
+  const h = Math.floor(n / 100);
+  const r = n % 100;
+  if (h) parts.push(HUNDREDS[h]);
+  if (r) {
+    if (r < 10) parts.push(ONES[r]);
+    else if (r < 20) parts.push(TEENS[r - 10]);
+    else {
+      const t = Math.floor(r / 10);
+      const o = r % 10;
+      if (o) parts.push(joinAr([ONES[o], TENS[t]]));
+      else parts.push(TENS[t]);
+    }
+  }
+  return joinAr(parts);
+}
+
+function numberToArabicWords(n) {
+  if (n === 0) return 'صفر';
+  const parts = [];
+  const millions = Math.floor(n / 1000000);
+  const thousands = Math.floor((n % 1000000) / 1000);
+  const rest = n % 1000;
+  if (millions) {
+    if (millions === 1) parts.push('مليون');
+    else if (millions === 2) parts.push('مليونان');
+    else if (millions <= 10) parts.push(below1000(millions) + ' ملايين');
+    else parts.push(below1000(millions) + ' مليون');
+  }
+  if (thousands) {
+    if (thousands === 1) parts.push('ألف');
+    else if (thousands === 2) parts.push('ألفان');
+    else if (thousands <= 10) parts.push(below1000(thousands) + ' آلاف');
+    else parts.push(below1000(thousands) + ' ألفًا');
+  }
+  if (rest) parts.push(below1000(rest));
+  return joinAr(parts);
+}
+
+function toArabicIndic(n) {
+  return Math.trunc(n).toString().replace(/[0-9]/g, (d) => ARABIC_INDIC_MAP[d]);
+}
+
+function amountPhrase(n) {
+  return {
+    numeric: toArabicIndic(n),
+    words: `${numberToArabicWords(n)} جنيهًا مصريًا`
+  };
+}
+
+// ==========================================
+// 2. DATE & SCOPE LOGIC
+// ==========================================
+const WEEKDAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+function dateParts(input) {
+  const d = new Date(input);
+  return {
+    dayName: WEEKDAYS[d.getDay()],
+    day: d.getDate(),
+    month: d.getMonth() + 1,
+    monthName: MONTHS[d.getMonth()],
+    year: d.getFullYear()
+  };
+}
+
+const CONTENT_TYPES = { story: 'ستوري', reel: 'ريل', post: 'بوست', video: 'فيديو' };
+const QTY_WORDS = ['', 'واحد', 'اثنين', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة'];
+
+function buildDeliverableLine(d) {
+  let line = `نشر عدد ${QTY_WORDS[d.quantity]} ${CONTENT_TYPES[d.type]} على (${d.platforms.join(' - ')})`;
+  if (d.mirrorTo && d.mirrorTo.length) line += ` مع إعادة نشره على ${d.mirrorTo.join(' و')}`;
+  if (d.boosting) line += ` بالإضافة إلى كود لتعزيز المحتوى`;
+  return line;
+}
+
+function buildScopeParagraph(deliverables, amountWords, amountNumeric) {
+  const body = deliverables.map(buildDeliverableLine).join(' - ');
+  return `${body}، وذلك مقابل مبلغ وقدره ${amountNumeric} جنيهًا مصريًا (${amountWords} فقط لا غير).`;
+}
+
+// ==========================================
+// 3. UI LOGIC
+// ==========================================
+const deliverablesEl = document.getElementById('deliverables');
+const tpl = document.getElementById('deliverableTpl');
+const previewEl = document.getElementById('preview');
+const errorEl = document.getElementById('error');
+const submitBtn = document.getElementById('submitBtn');
+
+function addDeliverable() {
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.querySelector('.remove').addEventListener('click', () => { node.remove(); updatePreview(); });
+  node.querySelectorAll('input, select').forEach(el => el.addEventListener('input', updatePreview));
+  deliverablesEl.appendChild(node);
+  updatePreview();
+}
+
+function collectDeliverables() {
+  return [...deliverablesEl.querySelectorAll('.deliverable')].map(node => ({
+    type: node.querySelector('.ctype').value,
+    quantity: parseInt(node.querySelector('.qty').value, 10),
+    platforms: [...node.querySelectorAll('.pf:checked')].map(x => x.value),
+    mirrorTo: [...node.querySelectorAll('.mf:checked')].map(x => x.value),
+    boosting: node.querySelector('.boost').checked
+  }));
+}
+
+function updatePreview() {
+  const deliverables = collectDeliverables();
+  const amountVal = document.getElementById('amount').value;
+  if (!deliverables.length || !amountVal) return;
+
+  try {
+    const { numeric, words } = amountPhrase(Number(amountVal));
+    const scope = buildScopeParagraph(deliverables, words, numeric);
+    previewEl.innerHTML = "تصوير وإخراج<br>" + scope;
+  } catch (e) {
+    previewEl.innerHTML = '— Fill in the form correctly to see the clause —';
+  }
+}
+
+document.getElementById('addDeliverable').addEventListener('click', addDeliverable);
+document.getElementById('amount').addEventListener('input', updatePreview);
+
+// ==========================================
+// 4. DOCX GENERATION (Browser-based)
+// ==========================================
+document.getElementById('form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  setError('');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Generating...';
+
+  try {
+    const formData = {
+      date: document.getElementById('date').value,
+      name: document.getElementById('name').value.trim(),
+      gender: document.querySelector('input[name="gender"]:checked').value,
+      amount: parseInt(document.getElementById('amount').value, 10),
+      deliverables: collectDeliverables()
+    };
+
+    if (!formData.name) throw new Error("Name is required");
+    if (formData.amount < 1000) throw new Error("Amount must be at least 1000 EGP");
+
+    // Calculate Arabic variables
+    const date = dateParts(formData.date);
+    const { numeric, words } = amountPhrase(formData.amount);
+    const scopeParagraph = buildScopeParagraph(formData.deliverables, words, numeric);
+    const honorific = formData.gender === 'female' ? 'السيدة' : 'السيد';
+    const position = formData.gender === 'female' ? 'صانعة محتوي' : 'صانع محتوي';
+
+    const data = {
+      date: date,
+      party2: { name: formData.name, honorific: honorific, position: position },
+      scopeParagraph: scopeParagraph
+    };
+
+    // Fetch the template from the same directory
+    fetch('template.docx')
+      .then(res => {
+        if (!res.ok) throw new Error("Could not load template.docx. Make sure it is in the same folder.");
+        return res.arrayBuffer();
+      })
+      .then(buffer => {
+        const zip = new PizZip(buffer);
+        const doc = new window.docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          delimiters: { start: '[[', end: ']]' } // MUST MATCH YOUR TEMPLATE
+        });
+
+        doc.render(data);
+
+        const out = doc.getZip().generate({
+          type: 'blob',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+
+        saveAs(out, formData.name + '.docx');
+      })
+      .catch(err => setError(err.message))
+      .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate DOCX';
+      });
+
+  } catch (err) {
+    setError(err.message);
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Generate DOCX';
+  }
+});
+
+function setError(msg) {
+  errorEl.textContent = msg || '';
+  errorEl.hidden = !msg;
+}
+
+addDeliverable();
+</script>
+</body>
+</html>
