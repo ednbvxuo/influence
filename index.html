@@ -36,10 +36,10 @@
              font-size: 15px; line-height: 1.9; direction: rtl; text-align: right; white-space: pre-wrap; }
   .error { color: #b00020; margin-top: 12px; font-size: 14px; }
 </style>
-<!-- Load required libraries from CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.7/pizzip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.50.0/docxtemplater.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<!-- Load libraries from unpkg (More reliable for Github Pages) -->
+<script src="https://unpkg.com/pizzip@3.1.7/dist/pizzip.js"></script>
+<script src="https://unpkg.com/docxtemplater@3.50.0/build/docxtemplater.js"></script>
+<script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -135,6 +135,9 @@
 </template>
 
 <script>
+// FIX FOR GITHUB PAGES / CDN GLOBAL SCOPE
+window.PizZip = window.PizZip || PizZip;
+
 // ==========================================
 // 1. ARABIC NUMBER LOGIC
 // ==========================================
@@ -294,7 +297,6 @@ document.getElementById('form').addEventListener('submit', (e) => {
     if (!formData.name) throw new Error("Name is required");
     if (formData.amount < 1000) throw new Error("Amount must be at least 1000 EGP");
 
-    // Calculate Arabic variables
     const date = dateParts(formData.date);
     const { numeric, words } = amountPhrase(formData.amount);
     const scopeParagraph = buildScopeParagraph(formData.deliverables, words, numeric);
@@ -307,18 +309,18 @@ document.getElementById('form').addEventListener('submit', (e) => {
       scopeParagraph: scopeParagraph
     };
 
-    // Fetch the template from the same directory
     fetch('template.docx')
       .then(res => {
         if (!res.ok) throw new Error("Could not load template.docx. Make sure it is in the same folder.");
         return res.arrayBuffer();
       })
       .then(buffer => {
-        const zip = new PizZip(buffer);
+        // Using window.PizZip to ensure it's found
+        const zip = new window.PizZip(buffer);
         const doc = new window.docxtemplater(zip, {
           paragraphLoop: true,
           linebreaks: true,
-          delimiters: { start: '[[', end: ']]' } // MUST MATCH YOUR TEMPLATE
+          delimiters: { start: '[[', end: ']]' }
         });
 
         doc.render(data);
