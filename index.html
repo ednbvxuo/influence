@@ -316,11 +316,16 @@ document.getElementById('form').addEventListener('submit', (e) => {
       })
       .then(buffer => {
         // Using window.PizZip to ensure it's found
-        const zip = new window.PizZip(buffer);
+             const zip = new window.PizZip(buffer);
         const doc = new window.docxtemplater(zip, {
           paragraphLoop: true,
           linebreaks: true,
-          delimiters: { start: '[[', end: ']]' }
+          delimiters: { start: '[[', end: ']]' },
+          parser: tag => ({
+            get: scope => tag === '.'
+              ? scope
+              : tag.trim().split('.').reduce((o, k) => (o == null ? undefined : o[k]), scope)
+          })
         });
 
         doc.render(data);
